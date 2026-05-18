@@ -31,14 +31,25 @@ A robust and lightweight Android application designed to extract and play **Moti
 -   Minimum SDK: 24 (Android 7.0).
 -   Target SDK: 35 (Android 15).
 
-### Installation
+### Installation & Build
 
-1.  Clone the repository:
+1.  **Clone the repository**:
     ```bash
     git clone https://github.com/yourusername/LivePhotoApp.git
     ```
-2.  Open in Android Studio.
-3.  Build and run on a device that supports Motion Photos (or use samples).
+2.  **Open in Android Studio**:
+    *   Go to `File -> Open` and select the `LivePhotoApp` folder.
+    *   Wait for Gradle to sync.
+3.  **Build via CLI** (Optional):
+    If you have JDK 17 installed, you can build the APK directly:
+    ```bash
+    ./gradlew assembleDebug
+    ```
+    The APK will be located in `app/build/outputs/apk/debug/`.
+
+4.  **Run on Device**:
+    *   Connect your Android device.
+    *   Click the **Run** button in Android Studio.
 
 ## License
 
