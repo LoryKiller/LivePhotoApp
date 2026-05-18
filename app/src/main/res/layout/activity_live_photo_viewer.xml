@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- Container that stays static in size -->
+    <FrameLayout
+        android:id="@+id/contentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- Still photo -->
+        <ImageView
+            android:id="@+id/imagePhoto"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter" />
+
+        <!-- Video Clipping Container -->
+        <!-- This container matches the photo size, but will clip the video scaling inside -->
+        <FrameLayout
+            android:id="@+id/videoClippingContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="true">
+
+            <androidx.media3.ui.PlayerView
+                android:id="@+id/videoView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                app:use_controller="false"
+                app:resize_mode="fit"
+                app:surface_type="texture_view" />
+
+        </FrameLayout>
+
+    </FrameLayout>
+
+</FrameLayout>
