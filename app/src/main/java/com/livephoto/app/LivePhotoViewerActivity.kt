@@ -1,7 +1,6 @@
 package com.livephoto.app
 
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
+import android.animation.ObjectAnimator
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +23,11 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.mp4.Mp4Extractor
 import com.bumptech.glide.Glide
+import android.graphics.drawable.Drawable
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import com.livephoto.app.databinding.ActivityLivePhotoViewerBinding
 import java.io.File
 
@@ -34,8 +38,10 @@ class LivePhotoViewerActivity : AppCompatActivity() {
         const val EXTRA_PHOTO_URI = "extra_photo_uri"
         const val EXTRA_VIDEO_URI = "extra_video_uri"
         
-        private const val FADE_DURATION = 550L
+        private const val FADE_DURATION = 600L
+        private const val FADE_START_DELAY = 100L
         private const val HOLD_DELAY = 100L
+        private const val ZOOM_SCALE = 1.08f
     }
 
     private lateinit var binding: ActivityLivePhotoViewerBinding
@@ -77,7 +83,16 @@ class LivePhotoViewerActivity : AppCompatActivity() {
         }
 
         // 1. Image
-        Glide.with(this).load(Uri.parse(photoUriStr)).into(binding.imagePhoto)
+        Glide.with(this)
+            .load(Uri.parse(photoUriStr))
+            .listener(object : RequestListener<Drawable> {
+                override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean): Boolean = false
+                override fun onResourceReady(resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean): Boolean {
+                    updateViewportRatio(resource.intrinsicWidth, resource.intrinsicHeight)
+                    return false
+                }
+            })
+            .into(binding.imagePhoto)
 
         // 2. Player
         initExo(Uri.parse(videoUriStr))
@@ -147,13 +162,50 @@ class LivePhotoViewerActivity : AppCompatActivity() {
         binding.videoView.alpha = 0f
     }
 
+    private fun updateViewportRatio(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
+        
+        binding.root.post {
+            val containerWidth = binding.root.width
+            val containerHeight = binding.root.height
+            if (containerWidth <= 0 || containerHeight <= 0) return@post
+
+            val containerRatio = containerWidth.toFloat() / containerHeight
+            val imageRatio = width.toFloat() / height
+            
+            val finalWidth: Int
+            val finalHeight: Int
+            
+            if (imageRatio > containerRatio) {
+                // Image is wider than screen: match width, calculate height
+                finalWidth = containerWidth
+                finalHeight = (containerWidth / imageRatio).toInt()
+            } else {
+                // Image is taller than screen: match height, calculate width
+                finalHeight = containerHeight
+                finalWidth = (containerHeight * imageRatio).toInt()
+            }
+            
+            val params = binding.viewport.layoutParams
+            params.width = finalWidth
+            params.height = finalHeight
+            binding.viewport.layoutParams = params
+        }
+    }
+
     private fun setupTouch() {
         binding.root.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     isHeld = true
                     binding.root.postDelayed({
-                        if (isHeld) startPlayback()
+                        if (isHeld) {
+                            // Instant feedback: start zooming the photo immediately
+                            val totalDuration = FADE_DURATION + FADE_START_DELAY
+                            ObjectAnimator.ofFloat(binding.imagePhoto, View.SCALE_X, ZOOM_SCALE).setDuration(totalDuration).start()
+                            ObjectAnimator.ofFloat(binding.imagePhoto, View.SCALE_Y, ZOOM_SCALE).setDuration(totalDuration).start()
+                            startPlayback()
+                        }
                     }, HOLD_DELAY)
                     v.performClick()
                     true
@@ -180,46 +232,49 @@ class LivePhotoViewerActivity : AppCompatActivity() {
         isVideoActive = true
         p.seekTo(0)
         p.volume = 1f
-        
-        // Wait for the first frame to be rendered before fading in.
-        // This prevents "flicker" and buffer sync issues on TextureView.
         p.play()
 
-        binding.videoView.animate()
-            .alpha(1f)
-            .setDuration(FADE_DURATION)
-            .setListener(null)
-            .start()
-        
-        binding.imagePhoto.animate()
-            .alpha(0.7f)
-            .setDuration(FADE_DURATION)
-            .start()
+        val totalDuration = FADE_DURATION + FADE_START_DELAY
+
+        // 1. Zooms start immediately
+        ObjectAnimator.ofFloat(binding.videoView, View.SCALE_X, ZOOM_SCALE).setDuration(totalDuration).start()
+        ObjectAnimator.ofFloat(binding.videoView, View.SCALE_Y, ZOOM_SCALE).setDuration(totalDuration).start()
+        ObjectAnimator.ofFloat(binding.imagePhoto, View.SCALE_X, ZOOM_SCALE).setDuration(totalDuration).start()
+        ObjectAnimator.ofFloat(binding.imagePhoto, View.SCALE_Y, ZOOM_SCALE).setDuration(totalDuration).start()
+
+        // 2. Fade video in after delay
+        // We keep the imagePhoto at Alpha 1.0 during this transition to prevent a brightness dip.
+        // As the video on top becomes opaque, it naturally hides the photo.
+        ObjectAnimator.ofFloat(binding.videoView, View.ALPHA, 1f).apply {
+            duration = FADE_DURATION
+            startDelay = FADE_START_DELAY
+            start()
+        }
     }
 
     private fun stopPlayback() {
+        // Always reset image state
+        val duration = FADE_DURATION
+        ObjectAnimator.ofFloat(binding.imagePhoto, View.ALPHA, 1f).setDuration(duration).start()
+        ObjectAnimator.ofFloat(binding.imagePhoto, View.SCALE_X, 1f).setDuration(duration).start()
+        ObjectAnimator.ofFloat(binding.imagePhoto, View.SCALE_Y, 1f).setDuration(duration).start()
+
         if (!isVideoActive) return
         isVideoActive = false
         
         // iOS style: Smooth fade out back to the static image
-        binding.videoView.animate()
-            .alpha(0f)
-            .setDuration(FADE_DURATION)
-            .setListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) {
-                    if (!isVideoActive) {
-                        exoPlayer?.pause()
-                        exoPlayer?.volume = 0f
-                        exoPlayer?.seekTo(0)
-                    }
-                }
-            })
-            .start()
-
-        binding.imagePhoto.animate()
-            .alpha(1f)
-            .setDuration(FADE_DURATION)
-            .start()
+        ObjectAnimator.ofFloat(binding.videoView, View.ALPHA, 0f).setDuration(duration).start()
+        ObjectAnimator.ofFloat(binding.videoView, View.SCALE_X, 1f).setDuration(duration).start()
+        ObjectAnimator.ofFloat(binding.videoView, View.SCALE_Y, 1f).setDuration(duration).start()
+        
+        // Pause player after fade
+        binding.root.postDelayed({
+            if (!isVideoActive) {
+                exoPlayer?.pause()
+                exoPlayer?.volume = 0f
+                exoPlayer?.seekTo(0)
+            }
+        }, duration)
     }
 
     override fun onResume() {
