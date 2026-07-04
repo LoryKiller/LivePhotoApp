@@ -35,7 +35,7 @@ A robust and lightweight Android application designed to extract and play **Moti
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/yourusername/LivePhotoApp.git
+    git clone https://github.com/LoryKiller/LivePhotoApp.git
     ```
 2.  **Open in Android Studio**:
     *   Go to `File -> Open` and select the `LivePhotoApp` folder.
